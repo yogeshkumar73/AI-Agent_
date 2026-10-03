@@ -48,25 +48,28 @@ export const DashboardPage: React.FC = () => {
   }, [fetchData]);
 
   // Polling for processing documents
+  const hasProcessing = documents.some((d) => d.status === 'processing' || d.status === 'pending');
+
   useEffect(() => {
-    const hasProcessing = documents.some((d) => d.status === 'processing' || d.status === 'pending');
     if (!hasProcessing) return;
 
     const interval = setInterval(async () => {
       try {
         const docs = await api.listDocuments(searchQuery || undefined, undefined, selectedType || undefined);
         setDocuments(docs);
-        const st = await api.getStats();
-        setStats(st);
-        const ins = await api.getInsights();
-        setInsights(ins);
+        const stillProcessing = docs.some((d) => d.status === 'processing' || d.status === 'pending');
+        if (!stillProcessing) {
+          const [st, ins] = await Promise.all([api.getStats(), api.getInsights()]);
+          setStats(st);
+          setInsights(ins);
+        }
       } catch (e) {
         console.error('Status poll error', e);
       }
-    }, 2500);
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, [documents, searchQuery, selectedType]);
+  }, [hasProcessing, searchQuery, selectedType]);
 
   const handleUploadSuccess = (newDoc: DocumentItem) => {
     setDocuments((prev) => [newDoc, ...prev]);

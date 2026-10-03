@@ -11,20 +11,29 @@ from collections import defaultdict
 import asyncio
 
 # ──────────────────────────────────────────
-# Simple in-memory rate limiter
+# In-memory rate limiter with local dev bypass
 # ──────────────────────────────────────────
 _rate_limit_store: dict = defaultdict(list)
-RATE_LIMIT_REQUESTS = 60   # max requests
-RATE_LIMIT_WINDOW   = 60   # per N seconds
+LOCAL_IPS = {"127.0.0.1", "::1", "localhost", "testclient", "test"}
 
 def is_rate_limited(client_ip: str) -> bool:
+    if not settings.RATE_LIMIT_ENABLED or settings.RATE_LIMIT_REQUESTS <= 0:
+        return False
+
+    # Do not rate limit local development / loopback calls
+    if client_ip in LOCAL_IPS:
+        return False
+
     now = time.time()
-    window_start = now - RATE_LIMIT_WINDOW
+    window_start = now - settings.RATE_LIMIT_WINDOW
     timestamps = _rate_limit_store[client_ip]
-    # Prune old entries
+
+    # Prune old entries outside sliding window
     timestamps[:] = [t for t in timestamps if t > window_start]
-    if len(timestamps) >= RATE_LIMIT_REQUESTS:
+
+    if len(timestamps) >= settings.RATE_LIMIT_REQUESTS:
         return True
+
     timestamps.append(now)
     return False
 
@@ -61,7 +70,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/") and is_rate_limited(client_ip):
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Too many requests. Please slow down and try again shortly."}
+                content={"detail": "Too many requests. Please slow down and try again shortly."},
+                headers={"Retry-After": str(settings.RATE_LIMIT_WINDOW)}
             )
         return await call_next(request)
 
