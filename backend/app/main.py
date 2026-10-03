@@ -117,6 +117,9 @@ app.include_router(api_v1_router)
 
 
 @app.get("/")
+@app.get("/api")
+@app.get("/api/")
+@app.get("/api/index.py")
 async def root():
     return {
         "status": "online",
@@ -127,9 +130,11 @@ async def root():
 
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy",
         "database": "connected" if db.db is not None else "disconnected",
         "mock_db": db.is_mock,
     }
+
